@@ -79,8 +79,8 @@
       ab = [f(bbox[0]), f(bbox[1]), f(bbox[2]) + idx.ts, f(bbox[3]) + idx.ts];
       if (tileCache.size > 60) { const it = tileCache.keys(); for (let i = 0; i < 20; i++) tileCache.delete(it.next().value); }
     } else {
-      busy('Fetching streets from OpenStreetMap…');
-      json = await Core.overpass(Core.areaQuery(bbox));
+      busy('Fetching live map data (can take up to a minute here)…');
+      json = await Core.overpass(Core.areaQuery(bbox), { timeout: 90000 });
     }
     busy('Scoring every street…'); await new Promise(r => setTimeout(r, 30));
     const A = Core.buildArea(json, ab, cfg);
@@ -92,7 +92,7 @@
     if (c) { if (!(c.id in nets)) nets[c.id] = getJSON(`transit/${c.id}.json`).catch(() => null); return nets[c.id]; }
     if (!to || Core.dist(from.lat, from.lon, to.lat, to.lon) < 2000) return null;
     const key = from.lat.toFixed(1) + ',' + from.lon.toFixed(1);
-    if (!(key in nets)) nets[key] = Core.overpass(Core.transitQuery(Core.bboxFor([from, to], 6000)), { timeout: 25000 }).then(Core.parseTransit).catch(() => null);
+    if (!(key in nets)) nets[key] = Core.overpass(Core.transitQuery(Core.bboxFor([from, to], 6000)), { timeout: 90000 }).then(Core.parseTransit).catch(() => null);
     return nets[key];
   }
 
@@ -124,23 +124,30 @@
           if (res.error) throw new Error(res.error);
           cards = res.cands; notes = res.tradeoffs; st.sel = res.chosen;
         }
-        busy('Checking the trains…');
-        const net = await netP; if (my !== runId) return;
-        const tr = net && net.lines.length ? Core.transitRoute(net, st.from, st.to) : null;
         const tname = (st.city && st.city.transitName) || 'train';
-        if (!res) {
-          if (!tr) throw new Error(`That is about ${fmtMin(d * 1.3 / Core.WALK)} on foot, which is too far to plan as a walk, and there is no rail line that helps. Try somewhere closer.`);
-          cards = [{ transit: tr, mins: tr.mins, label: tname }]; st.sel = 0;
-          notes = [{ kind: 'transit', text: `That is roughly ${fmtMin(d * 1.3 / Core.WALK)} on foot, so the ${tname} is the way to go. The walks at each end still take the nicest streets.` }];
-        } else if (tr && tr.rides) {
+        const addTransit = (tr) => { // returns true if a train option was added
+          if (!tr || !tr.rides) return false;
           const w = cards[st.sel], f = cards[0];
-          if (tr.mins <= f.mins - 6) {
-            cards.push({ transit: tr, mins: tr.mins, label: tname });
-            const best = tr.mins < f.mins * .65 || f.mins > 50;
-            if (best) notes.unshift({ kind: 'transit', idx: cards.length - 1, text: `The ${tname} is the better call here: about ${fmtMin(tr.mins)} door to door against ${fmtMin(f.mins)} on foot.`, cta: `Show the ${tname} route` });
-            else notes.push({ kind: 'transit', idx: cards.length - 1, text: `In a hurry? The ${tname} takes about ${fmtMin(tr.mins)} (${fmtMin(w.mins - tr.mins)} quicker than this walk).`, cta: `Show the ${tname} route` });
-            if (best && f.mins > 75) st.sel = cards.length - 1;
-          }
+          if (tr.mins > f.mins - 6) return false;
+          cards.push({ transit: tr, mins: tr.mins, label: tname });
+          const best = tr.mins < f.mins * .65 || f.mins > 50;
+          if (best) notes.unshift({ kind: 'transit', idx: cards.length - 1, text: `The ${tname} is the better call here: about ${fmtMin(tr.mins)} door to door against ${fmtMin(f.mins)} on foot.`, cta: `Show the ${tname} route` });
+          else notes.push({ kind: 'transit', idx: cards.length - 1, text: `In a hurry? The ${tname} takes about ${fmtMin(tr.mins)} (${fmtMin(w.mins - tr.mins)} quicker than this walk).`, cta: `Show the ${tname} route` });
+          return best && f.mins > 75;
+        };
+        const routeNet = net => net && net.lines.length ? Core.transitRoute(net, st.from, st.to) : null;
+        if (res && !cityAt(st.from)) {
+          // live rail data can take a while outside the featured cities: show the walk now, add the train when it lands
+          netP.then(net => { if (my !== runId || st.cards !== cards) return; const before = cards.length; addTransit(routeNet(net)); if (cards.length > before) { render(false); toast('Found a train option for this trip.'); } });
+        } else {
+          busy(res ? 'Checking the trains…' : 'Checking the trains (live data can take a minute)…');
+          const net = await netP; if (my !== runId) return;
+          const tr = routeNet(net);
+          if (!res) {
+            if (!tr) throw new Error(`That is about ${fmtMin(d * 1.3 / Core.WALK)} on foot, which is too far to plan as a walk, and I could not find a rail line that helps. Try somewhere closer.`);
+            cards = [{ transit: tr, mins: tr.mins, label: tname }]; st.sel = 0;
+            notes = [{ kind: 'transit', text: `That is roughly ${fmtMin(d * 1.3 / Core.WALK)} on foot, so the ${tname} is the way to go. The walks at each end still take the nicest streets.` }];
+          } else if (addTransit(tr)) st.sel = cards.length - 1;
         }
       }
       st.cards = cards; st.notes = notes;
