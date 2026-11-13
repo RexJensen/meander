@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>Meander</title>
+<meta name="description" content="Walking directions that take the nicest way there, not just the shortest.">
+<meta name="theme-color" content="#f4f6f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Layout: full-bleed map; a search card floats on top, results rise in a bottom sheet. On wide screens both dock left. */
+:root{
+  --paper:#f4f6f1; --card:#ffffff; --ink:#16211b; --muted:#5d6b63; --line:#dfe5dc;
+  --green:#1b7a50; --green-soft:#e2f1e8; --amber:#a85b06; --amber-soft:#fdf0d9; --red:#c2362b; --red-soft:#fbe6e3; --blue:#2f6fde;
+  --display:"Bricolage Grotesque","Inter",system-ui,sans-serif; --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --shadow:0 6px 24px rgba(20,35,27,.16);
+}
+:root[data-night="1"]{
+  --paper:#0f1512; --card:#18211c; --ink:#e9efe9; --muted:#9aa89f; --line:#2b372f;
+  --green:#58c48f; --green-soft:#1c3327; --amber:#f0b35a; --amber-soft:#3a2c14; --red:#ff7b6e; --red-soft:#3f1f1c; --blue:#7fa8ff;
+  --shadow:0 6px 24px rgba(0,0,0,.5); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.4 var(--body);color:var(--ink);background:var(--paper);overflow:hidden;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible,input:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+#map{position:absolute;inset:0;background:var(--paper)}
+.leaflet-container{font:inherit}
+.panel{position:absolute;z-index:1000;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));background:var(--card);border-radius:18px;box-shadow:var(--shadow)}
+#top{top:calc(10px + env(safe-area-inset-top));padding:12px 14px 14px}
+#brand{display:flex;align-items:center;gap:10px}
+#brand h1{font:700 22px/1 var(--display);margin:0;letter-spacing:-.02em}
+#brand h1 span{color:var(--green)}
+#cityBtn{margin-left:auto;font-weight:600;font-size:13px;padding:6px 10px;border-radius:999px;background:var(--paper);border:1px solid var(--line);display:flex;gap:6px;align-items:center}
+#summary{display:none;align-items:center;gap:8px;font-weight:500}
+#summary b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+#summary button{color:var(--green);font-weight:600;padding:6px 4px}
+#top.collapsed #form{display:none} #top.collapsed #summary{display:flex} #top.collapsed{padding:10px 14px}
+#top.collapsed #brand{display:none}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--paper);border-radius:12px;padding:3px;margin:12px 0 10px}
+.seg button{padding:8px;border-radius:9px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.field{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:0 10px;background:var(--card);margin-bottom:8px;position:relative}
+.field label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:38px}
+.field input{flex:1;min-width:0;border:0;background:none;font:inherit;font-size:16px;color:var(--ink);padding:11px 0;outline:none}
+.field button{color:var(--green);padding:8px 2px;display:flex}
+#sugg{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);z-index:5;overflow:hidden;border:1px solid var(--line)}
+#sugg button{display:block;width:100%;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+#sugg button:last-child{border:0}
+#sugg small{display:block;color:var(--muted)}
+.lab{font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 6px}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -14px;padding:0 14px}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;padding:8px 12px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:14px;background:var(--card)}
+.chips button[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.cta{display:block;width:100%;margin-top:12px;padding:13px;border-radius:13px;background:var(--green);color:#fff;font-weight:600;font-size:16px}
+:root[data-night="1"] .cta{color:#0c1a13}
+.cta:disabled{opacity:.5}
+#fabs{position:absolute;z-index:999;right:max(10px,env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;transition:bottom .2s}
+#fabs button{width:44px;height:44px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:grid;place-items:center}
+#fabs button[aria-pressed=true]{background:var(--ink);color:var(--card)}
+#sheet{bottom:0;left:0;right:0;border-radius:20px 20px 0 0;max-height:54%;display:none;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+#sheet.open{display:flex}
+#grab{padding:8px 0 4px;display:grid;place-items:center;width:100%}
+#grab i{width:40px;height:4px;border-radius:2px;background:var(--line);display:block}
+#cards{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 10px;scrollbar-width:none;flex:none;position:relative}
+#cards::-webkit-scrollbar{display:none}
+.card{flex:none;min-width:136px;text-align:left;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--card)}
+.card[aria-pressed=true]{border-color:var(--green);background:var(--green-soft)}
+.card .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;gap:6px;align-items:center}
+.card .t{font:700 24px/1.1 var(--display);margin:3px 0 1px;font-variant-numeric:tabular-nums}
+.card .t small{font:500 13px var(--body);color:var(--muted)}
+.card{max-width:230px}.card .f{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .f b{color:var(--ink);font-weight:600}
+:root[data-night="1"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.7)}
+.meter{height:5px;border-radius:3px;background:var(--line);margin:7px 0 5px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--green);border-radius:3px}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--green);color:#fff;letter-spacing:.04em}
+.tag.warn{background:var(--red)}
+#detail{overflow-y:auto;padding:0 14px 14px;-webkit-overflow-scrolling:touch}
+#sheet.peek #detail{display:none}
+.note{border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:14px;background:var(--paper)}
+.note.warn{background:var(--red-soft)} .note.nicer{background:var(--green-soft)} .note.transit{background:var(--amber-soft)}
+.note button{display:inline-block;margin-top:7px;font-weight:600;padding:7px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:13px}
+h3{font:600 12px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.pass{display:flex;flex-wrap:wrap;gap:6px}
+.pass span{font-size:13px;padding:5px 10px;border-radius:999px;background:var(--green-soft);font-weight:500}
+ol.steps{list-style:none;margin:0;padding:0}
+ol.steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+ol.steps li:last-child{border:0}
+ol.steps li span{margin-left:auto;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.leg{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.badge{flex:none;min-width:28px;height:28px;padding:0 7px;border-radius:14px;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;background:var(--blue)}
+.badge.walk{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+.leg small{color:var(--muted);display:block}
+.row{display:flex;gap:8px;margin-top:12px}
+.row .cta{margin:0}
+.ghost{flex:none;padding:13px 16px;border-radius:13px;border:1px solid var(--line);font-weight:600}
+#nav{display:none;top:calc(10px + env(safe-area-inset-top));padding:12px 14px;background:var(--ink);color:var(--card)}
+#nav .big{font:700 19px/1.2 var(--display)}
+#nav .sub{opacity:.75;font-size:13px;margin-top:3px;display:flex;gap:10px;align-items:center}
+#nav button{margin-left:auto;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--card);color:var(--ink)}
+body.nav #nav{display:block} body.nav #top{display:none}
+#toast{position:absolute;z-index:1200;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:var(--ink);color:var(--card);padding:10px 14px;border-radius:12px;font-size:14px;max-width:min(88%,420px);display:none;box-shadow:var(--shadow);text-align:center}
+#busy{position:absolute;z-index:1100;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card);padding:12px 18px;border-radius:999px;box-shadow:var(--shadow);font-weight:600;display:none;align-items:center;gap:10px;white-space:nowrap}
+#busy i{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--green);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#busy i{animation:none}}
+#cityMenu{position:absolute;z-index:1300;inset:0;background:rgba(10,20,15,.45);display:none;align-items:flex-end;justify-content:center}
+#cityMenu.open{display:flex}
+#cityMenu div{background:var(--card);width:min(100%,460px);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+#cityMenu h2{font:700 18px var(--display);margin:0 0 4px}
+#cityMenu p{margin:0 0 10px;color:var(--muted);font-size:13px}
+#cityMenu button{display:flex;width:100%;padding:12px 4px;border-bottom:1px solid var(--line);font-weight:600;text-align:left}
+#cityMenu button small{margin-left:auto;color:var(--muted);font-weight:400}
+.dot{width:18px;height:18px;border-radius:50%;background:var(--blue);border:3px solid #fff;box-shadow:0 0 0 2px rgba(47,111,222,.35),0 2px 6px rgba(0,0,0,.3)}
+.pin{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--green);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.pin.a{background:#16211b;border-radius:50%;width:16px;height:16px}
+.spot{width:10px;height:10px;border-radius:50%;background:#e8a917;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.stn{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid #222}
+.leaflet-popup-content{margin:12px 14px;font:14px/1.4 var(--body)}
+.leaflet-popup-content b{font-weight:600}
+.leaflet-popup-content button{display:block;margin-top:8px;padding:8px 12px;border-radius:999px;background:#1b7a50;color:#fff;font-weight:600;width:100%}
+.leaflet-popup-content button.alt{background:#eef2ec;color:#16211b}
+.leaflet-control-attribution{font-size:10px}
+@media (min-width:820px){
+  .panel{left:14px;right:auto;width:390px}
+  #sheet{left:14px;right:auto;bottom:14px;border-radius:18px;max-height:calc(100% - 250px)}
+  #fabs{bottom:24px!important}
+  #cityMenu{align-items:center} #cityMenu div{border-radius:20px}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<section class="panel" id="top">
+  <div id="brand"><h1>Mean<span>der</span></h1><button id="cityBtn" aria-haspopup="dialog"><span id="cityName">New York City</span> ▾</button></div>
+  <div id="summary"><b id="sumText"></b><button id="editBtn">Edit</button></div>
+  <div id="form">
+    <div class="seg" role="group" aria-label="Mode"><button id="modeGo" aria-pressed="true">Go somewhere</button><button id="modeLoop" aria-pressed="false">Just walk</button></div>
+    <div class="field"><label for="from">From</label><input id="from" autocomplete="off" placeholder="My location" enterkeyhint="search"><button id="useGps" aria-label="Use my location"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button></div>
+    <div class="field" id="toField"><label for="to">To</label><input id="to" autocomplete="off" placeholder="Where to? Or tap the map" enterkeyhint="search"></div>
+    <div id="goOpts"><div class="lab">Extra time I'm happy to spend</div><div class="chips" id="extraChips"></div></div>
+    <div id="loopOpts" hidden><div class="lab">How long a walk?</div><div class="chips" id="loopChips"></div></div>
+    <button class="cta" id="goBtn">Find the nicest way</button>
+  </div>
+</section>
+
+<section class="panel" id="nav">
+  <div class="big" id="navStep">Starting…</div>
+  <div class="sub"><span id="navLeft"></span><button id="navEnd">End</button></div>
+</section>
+
+<div id="fabs">
+  <button id="fabNight" aria-pressed="false" aria-label="After dark mode" title="After dark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+  <button id="fabZones" aria-pressed="true" aria-label="Show higher-crime areas" title="Higher-crime areas"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg></button>
+  <button id="fabLocate" aria-label="Go to my location" title="My location"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l7 19-7-4-7 4z"/></svg></button>
+</div>
+
+<section class="panel" id="sheet" aria-live="polite">
+  <button id="grab" aria-label="Expand or collapse details"><i></i></button>
+  <div id="cards"></div>
+  <div id="detail"></div>
+</section>
+
+<div id="busy"><i></i><span id="busyText">Reading the streets…</span></div>
+<div id="toast" role="status"></div>
+<div id="cityMenu" role="dialog" aria-label="Choose a city"><div><h2>Cities</h2><p>Meander works anywhere with OpenStreetMap coverage. These cities also have curated scenic spots, safety data and offline-fast maps.</p><span id="cityList"></span></div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
