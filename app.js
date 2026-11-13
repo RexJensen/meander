@@ -207,7 +207,7 @@
     pins();
     // cards
     $('#cards').innerHTML = cards.map((c, i) => {
-      if (c.transit) { const rides = c.transit.legs.filter(l => l.type === 'ride'); return `<button class="card" data-i="${i}" aria-pressed="${i === st.sel}"><div class="k">${esc(c.label)}</div><div class="t">${fmtMin(c.mins)}</div><div class="f" style="display:flex;gap:4px;margin:6px 0 4px">${rides.map(l => { const col = lineColor(l); return `<span class="badge" style="background:${col};color:${textOn(col)};height:20px;min-width:20px;font-size:11px">${esc(l.ref.slice(0, 5))}</span>`; }).join('')}</div><div class="f">${fmtMin(c.transit.walkMins)} walking</div></button>`; }
+      if (c.transit) { const rides = c.transit.legs.filter(l => l.type === 'ride'); return `<button class="card" data-i="${i}" aria-pressed="${i === st.sel}"><div class="k">${esc(c.label)}</div><div class="t">${fmtMin(c.mins)}</div><div class="f" style="display:flex;gap:4px;margin:6px 0 4px">${rides.map(l => { const col = lineColor(l); return `<span class="badge" style="background:${col};color:${textOn(col)};height:20px;min-width:20px;font-size:11px">${esc(l.ref.slice(0, 12))}</span>`; }).join('')}</div><div class="f">${fmtMin(c.transit.walkMins)} walking</div></button>`; }
       return `<button class="card" data-i="${i}" aria-pressed="${i === st.sel}"><div class="k">${esc(c.label)}${c.dangerM > 50 ? ' <span class="tag warn">!</span>' : ''}</div><div class="t">${fmtMin(c.mins)} ${c.extra >= 1 ? `<small>+${Math.round(c.extra)}</small>` : ''}</div><div class="meter" title="Niceness ${c.nice}/100"><i style="width:${c.nice}%"></i></div><div class="f"><b>${word(c.nice)}</b></div><div class="f">${facts(c)}</div></button>`;
     }).join('');
     // detail
@@ -218,7 +218,7 @@
       h += '<h3>The trip</h3>';
       for (const leg of sel.transit.legs) {
         if (leg.type === 'walk') { if (leg.mins < .7) continue; h += `<div class="leg"><span class="badge walk">🚶</span><div><b>Walk ${fmtMin(leg.mins)}</b> ${leg.transfer ? 'to change at' : 'to'} ${esc(leg.to.n)}${leg.route ? `<small>${word(leg.route.nice)} stretch · ${facts(leg.route)}${leg.route.highlights.length ? ' · passes ' + esc(leg.route.highlights[0].name) : ''}</small>` : ''}${leg.route && leg.route.dangerM > 50 ? `<small style="color:var(--red)">Passes through ${esc(leg.route.danger.map(z => z.name).join(', '))} (higher reported crime)</small>` : ''}</div></div>`; }
-        else { const col = lineColor(leg); h += `<div class="leg"><span class="badge" style="background:${col};color:${textOn(col)}">${esc(leg.ref.slice(0, 6))}</span><div><b>${esc(leg.from)} → ${esc(leg.to)}</b><small>${leg.toward ? 'Toward ' + esc(leg.toward) + ' · ' : ''}${leg.stops} stop${leg.stops > 1 ? 's' : ''} · about ${fmtMin(leg.mins)}</small></div></div>`; }
+        else { const col = lineColor(leg); h += `<div class="leg"><span class="badge" style="background:${col};color:${textOn(col)}">${esc(leg.ref.slice(0, 12))}</span><div><b>${esc(leg.from)} → ${esc(leg.to)}</b><small>${leg.toward ? 'Toward ' + esc(leg.toward) + ' · ' : ''}${leg.stops} stop${leg.stops > 1 ? 's' : ''} · about ${fmtMin(leg.mins)}</small></div></div>`; }
       }
       h += `<p style="color:var(--muted);font-size:12px">Train times are estimates from the route map, not live schedules. Allow for waiting.</p>`;
       h += `<div class="row"><button class="ghost" id="shareBtn">Share</button></div>`;
