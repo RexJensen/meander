@@ -265,7 +265,12 @@
   function tickNav() {
     const n = st.nav; if (!n) return; const r = n.r, co = r.coords;
     let best = n.idx, bd = Infinity;
-    if (st.gps) { for (let i = Math.max(0, n.idx - 5); i < Math.min(co.length, n.idx + 80); i++) { const d = Core.dist(st.gps.lat, st.gps.lon, co[i][0], co[i][1]); if (d < bd) { bd = d; best = i; } } n.idx = best; }
+    if (st.gps) {
+      const scan = (i0, i1) => { for (let i = i0; i < i1; i++) { const d = Core.dist(st.gps.lat, st.gps.lon, co[i][0], co[i][1]); if (d < bd) { bd = d; best = i; } } };
+      scan(Math.max(0, n.idx - 5), Math.min(co.length, n.idx + 80));
+      if (bd > 45) scan(0, co.length); // lost the thread (GPS jump, shortcut, late start): look along the whole route
+      n.idx = best;
+    }
     let left = 0; for (let i = n.idx; i + 1 < co.length; i++) left += Core.dist(co[i][0], co[i][1], co[i + 1][0], co[i + 1][1]);
     let si = 0; r.steps.forEach((s, k) => { if (s.i <= n.idx) si = k; });
     const next = r.steps[si + 1];
