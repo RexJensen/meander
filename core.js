@@ -616,7 +616,7 @@ out geom(${B}) qt;`;
   function transitRoute(net, from, to, opts) {
     opts = opts || {};
     prepTransit(net);
-    const { off, atStation, near, total } = net._prep, St = net.stations, maxWalk = opts.maxWalk || 1600;
+    const { off, atStation, near, total } = net._prep, St = net.stations, maxWalk = opts.maxWalk || 2400;
     const lineOf = id => { let lo = 0, hi = net.lines.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (off[m] <= id) lo = m; else hi = m - 1; } return lo; };
     const D = new Float64Array(total).fill(Infinity), prev = new Int32Array(total).fill(-1), how = new Uint8Array(total); // how: 0 board,1 ride,2 transfer
     const startSt = new Int32Array(total).fill(-1);
